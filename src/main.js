@@ -1,6 +1,61 @@
 const MAX_CREEPS = 16;
 const ROOM_SIZE = 50;
-const COLORS = ['#aaa', '#bbb', '#ccc'];
+
+const DATA_TYPES = [
+  { type: 'terrain', terrain: 'plain' },
+  { type: 'terrain', terrain: 'wall', color: '#aaa', blocking: true },
+  { type: 'terrain', terrain: 'swamp', color: '#0f0' },
+  { type: 'source', color: '#ff0' },
+  { type: 'source-fetch', color: '#f0f' },
+];
+
+function findDataType(obj) {
+  const res = DATA_TYPES.findIndex(obj2 => {
+    if (obj.type !== obj2.type) return false;
+    if (obj2[obj2.type]) return obj2[obj2.type] === obj[obj2.type];
+    return true;
+  });
+  if (res === -1) return 0;
+  return res;
+}
+
+function findAdjacentTiles(x, y) {
+  const tiles = [
+    [-1, -1],
+    [-1, 0],
+    [-1, 1],
+    [0, -1],
+    [0, 1],
+    [1, -1],
+    [1, 0],
+    [1, 1],
+  ];
+  const positions = tiles.map(([dx, dy]) => [x + dx, y + dy]);
+  return positions.filter(
+    ([x1, y1]) =>
+      !(x1 < 1 || y1 < 1 || x1 + 1 >= ROOM_SIZE || y1 + 1 >= ROOM_SIZE)
+  );
+}
+
+function findSources(map) {
+  const status = findDataType({ type: 'source' });
+  const ids = Array.from(map).map(
+    (status2, i) => (status === status2 ? i : -1)
+  );
+  const filtered = ids.filter(e => e !== -1);
+  return filtered.map(id => [Math.floor(id / ROOM_SIZE), id % ROOM_SIZE]);
+}
+
+function setFetchingTiles(map, x, y) {
+  const tiles = findAdjacentTiles(x, y);
+  const available = tiles.filter(
+    ([x1, y1]) => !DATA_TYPES[map[x1 * ROOM_SIZE + y1]].blocking
+  );
+  available.forEach(([x1, y1]) => {
+    // eslint-disable-next-line no-param-reassign
+    map[x1 * ROOM_SIZE + y1] = findDataType({ type: 'source-fetch' });
+  });
+}
 
 let map;
 
@@ -17,26 +72,23 @@ module.exports.loop = () => {
   const objects = room.lookAtArea(0, 0, ROOM_SIZE, ROOM_SIZE, true);
   objects.forEach(obj => {
     const { x, y, type } = obj;
-    if (type === 'terrain') {
-      const { terrain } = obj;
-      if (terrain === 'swamp') {
-        map[x * ROOM_SIZE + y] = 1;
-      } else if (terrain === 'wall') {
-        map[x * ROOM_SIZE + y] = 2;
-      }
-    } else {
-      console.log(obj.type);
+    const status = findDataType(obj);
+    if (status) {
+      const idx = x * ROOM_SIZE + y;
+      map[idx] = Math.max(status, map[idx]);
     }
+  });
+  const sources = findSources(map);
+  sources.forEach(([x, y]) => {
+    setFetchingTiles(map, x, y);
   });
 
   map.forEach((val, i) => {
     const x = Math.floor(i / ROOM_SIZE);
     const y = i % ROOM_SIZE;
-    if (val === 1) {
-      room.visual.circle(x, y, { fill: '#00ff00' });
-    }
-    if (val === 2) {
-      room.visual.circle(x, y, { fill: '#aaa' });
+    const color = DATA_TYPES[val] && DATA_TYPES[val].color;
+    if (color) {
+      room.visual.circle(x, y, { fill: color });
     }
   });
 
